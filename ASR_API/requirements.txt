@@ -1,0 +1,10 @@
+# Server
+Flask
+gunicorn 
+
+# Model Dependencies (adjust based on your specific model)
+torch
+transformers
+soundfile
+librosa 
+requests # To download the audio from Firebase URL
