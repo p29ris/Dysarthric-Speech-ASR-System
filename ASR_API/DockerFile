@@ -1,0 +1,22 @@
+# Use a known stable Python version for PyTorch/HuggingFace builds
+FROM python:3.9-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# The COPY source path must be relative to the build context root.
+# Since the build context root is the parent directory of ASR_API, we use the full ASR_API path.
+COPY ASR_API/requirements.txt ./
+
+# Install dependencies (This is the memory-intensive step)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application code
+COPY ASR_API/app.py ./
+
+# Expose the port (8080 is the default for Gunicorn)
+EXPOSE 8080
+
+# Command to run the application using Gunicorn
+# Note: We run app.py directly from the /app directory
+CMD ["gunicorn", "app:direct_upload_and_transcribe", "--bind", "0.0.0.0:8080", "--timeout", "300"]
