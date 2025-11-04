@@ -1,20 +1,21 @@
 import os
-import requests
-import soundfile as sf
-import torch
 from flask import Flask, request, jsonify
 from transformers import pipeline
+import torch
+# We do not need requests or urllib.parse for the direct upload solution
 
 # --- Configuration ---
-# REPLACE with your actual model name on Hugging Face
-HF_MODEL_NAME = "YOUR_HUGGINGFACE_MODEL_NAME/ASR_Model" 
+# HF_MODEL_NAME will be loaded from the environment variables set on Render
+# IMPORTANT: Make sure you set HF_MODEL_NAME in Render environment settings
+HF_MODEL_NAME = "p29ris/whisper-small-torgo-step2500" 
 TEMP_AUDIO_PATH = "temp_audio.wav"
 
 # --- Initialization ---
-# Use 'cuda' if you use a GPU on Render, otherwise 'cpu'
-device = 0 if torch.cuda.is_available() else -1 
+# Use 0 for GPU (cuda) if available on your Render instance, otherwise use -1 for CPU
+# For Free/Starter tiers, use -1 (CPU)
+device = -1 # Assuming CPU for free/starter Render plan
 
-# Load the ASR model pipeline (This is the slow part, do it once globally)
+# Load the ASR model pipeline (This runs once when the service starts)
 try:
     asr_pipeline = pipeline(
         "automatic-speech-recognition",
@@ -23,66 +24,70 @@ try:
     )
     print(f"Model {HF_MODEL_NAME} loaded successfully.")
 except Exception as e:
-    print(f"Error loading model: {e}")
+    print(f"ERROR: Failed to load ASR model: {e}")
     asr_pipeline = None
 
 app = Flask(__name__)
 
-# --- Helper Function ---
-def download_audio_from_url(url, output_path):
-    """Downloads an audio file from a given URL."""
-    response = requests.get(url, stream=True)
-    if response.status_code != 200:
-        raise Exception(f"Failed to download audio. Status: {response.status_code}")
-    
-    with open(output_path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
-    print(f"Audio downloaded to {output_path}")
+# --- 1. HEALTH CHECK ROUTE (GET /) ---
+@app.route('/', methods=['GET'])
+def health_check():
+    """Provides a simple JSON response to confirm the server is running."""
+    status = "Operational" if asr_pipeline else "Error: Model failed to load"
+    return jsonify({
+        "status": status,
+        "message": "ASR API is running successfully.",
+        "model_name": HF_MODEL_NAME
+    }), 200
 
-# --- API Endpoint ---
-@app.route('/transcribe', methods=['POST'])
-def transcribe_audio():
+# --- 2. DIRECT FILE UPLOAD ENDPOINT (POST /upload_and_transcribe) ---
+@app.route('/upload_and_transcribe', methods=['POST'])
+def direct_upload_and_transcribe():
     if not asr_pipeline:
         return jsonify({"message": "ASR model is not initialized."}), 503
     
-    data = request.json
-    audio_url = data.get('audioUrl')
+    # 1. Validation Check
+    if 'audio_file' not in request.files:
+        return jsonify({"message": "Missing file part named 'audio_file'."}), 400
     
-    if not audio_url:
-        return jsonify({"message": "Missing audioUrl in request body."}), 400
+    audio_file = request.files['audio_file']
+    if audio_file.filename == '':
+        return jsonify({"message": "No selected file."}), 400
 
     try:
-        # 1. Download the audio file from Firebase Storage URL
-        download_audio_from_url(audio_url, TEMP_AUDIO_PATH)
+        # 2. Save the uploaded file locally on the Render server
+        # The .save() method streams the file data directly to disk.
+        audio_file.save(TEMP_AUDIO_PATH)
+        print(f"File received and saved locally: {TEMP_AUDIO_PATH}")
         
-        # 2. Run the ASR Model
-        # The pipeline handles resampling and format conversion internally
+        # 3. Run the ASR Model 
         print("Starting transcription...")
-        
-        # You can specify chunking or batching here for large files if needed
         result = asr_pipeline(TEMP_AUDIO_PATH)
         transcribed_text = result['text']
         
         print(f"Transcription complete: {transcribed_text[:50]}...")
         
-        # 3. Clean up the temporary file
+        # 4. Clean up the temporary file
         os.remove(TEMP_AUDIO_PATH)
 
-        # 4. Return the result to the Expo App
+        # 5. Return the result
         return jsonify({
-            "message": "Transcription successful",
+            "message": "Transcription successful (Direct Upload)",
             "transcribedText": transcribed_text
         })
     
     except Exception as e:
-        print(f"Transcription error: {e}")
         # Ensure cleanup even on error
         if os.path.exists(TEMP_AUDIO_PATH):
             os.remove(TEMP_AUDIO_PATH)
             
-        return jsonify({"message": f"An error occurred during processing: {str(e)}"}), 500
+        print(f"Transcription error: {e}")
+        # Return a generic server error to the client
+        return jsonify({"message": f"Server processing error. Check service logs for details. Error: {str(e)}"}), 500
+
+
+# --- 3. (REMOVED) The /transcribe route for Firebase is removed as we are not using Firebase storage for now. ---
 
 if __name__ == '__main__':
-    # Use gunicorn for production
-    app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
