@@ -1,188 +1,209 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { sendSignInLinkToEmail, createUserWithEmailAndPassword, isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { auth } from './firebaseConfig';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
-const actionCodeSettings = {
-  url: 'https://asr-system-7744a.firebaseapp.com', // replace with your domain
-  handleCodeInApp: true,
-};
+// Firebase imports
+import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { auth } from './firebaseConfig'; // Adjust path to your firebase config file
 
-const RegistrationScreen = () => {
+const RegistrationScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pin, setPin] = useState('');
-  const [step, setStep] = useState('register'); // register → verifyLink → verifyPin
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  const navigation = useNavigation();
-
-  // --- Step 1: Send verification email ---
-  const handleSendVerificationEmail = async () => {
-    if (!email || !password) {
-      setErrorMessage("Please fill in both email and password.");
+  // Create account and send verification email
+  const handleRegister = async () => {
+    if (!email || !password || !confirmPassword) {
+      Alert.alert("Error", "Please fill in all fields.");
       return;
     }
 
-    setLoading(true);
-    setErrorMessage('');
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert("Error", "Please enter a valid email address.");
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters long.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match.");
+      return;
+    }
+
     try {
-      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-      await AsyncStorage.setItem("emailForSignIn", email);
-      setStep("verifyLink");
-      Alert.alert("Check your inbox", "We sent a verification link to your email. Click it to verify.");
+      // Create user account
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      
+      // Send verification email (using Firebase's default template)
+      await sendEmailVerification(userCredential.user);
+      
+      // Sign out immediately to prevent auto-login
+      await auth.signOut();
+      
+      // Show alert and stay on registration screen
+      Alert.alert(
+        "Check Your Email", 
+        `We've sent a verification link to ${email}. Please check your inbox, verify your email, and then login.`
+      );
+      
+      // Clear form
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+
     } catch (error) {
       console.error(error);
-      setErrorMessage(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- Step 2: Complete verification when link is clicked ---
-  const handleCompleteVerification = async () => {
-    try {
-      const storedEmail = await AsyncStorage.getItem("emailForSignIn");
-      if (isSignInWithEmailLink(auth, email)) {
-        await signInWithEmailLink(auth, storedEmail, email);
-        setStep("verifyPin");
+      
+      // Handle specific error cases
+      if (error.code === 'auth/email-already-in-use') {
+        Alert.alert("Error", "This email is already registered. Please login instead.");
+      } else if (error.code === 'auth/weak-password') {
+        Alert.alert("Error", "Password is too weak. Please use a stronger password.");
+      } else {
+        Alert.alert("Error", error.message);
       }
-    } catch (error) {
-      console.error("Verification failed:", error);
-      setErrorMessage(error.message);
-    }
-  };
-
-  // --- Step 3: Verify PIN & Create Account ---
-  const handleVerifyPin = async () => {
-    if (pin !== "123456") {
-      setErrorMessage("The PIN is incorrect.");
-      return;
-    }
-
-    try {
-      const storedEmail = await AsyncStorage.getItem("emailForSignIn");
-      await createUserWithEmailAndPassword(auth, storedEmail, password);
-
-      Alert.alert("Success!", "Your account has been created. Please log in.", [
-        { text: "OK", onPress: () => navigation.navigate("Login") },
-      ]);
-    } catch (error) {
-      console.error("PIN verification error:", error);
-      setErrorMessage(error.message);
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        {loading ? (
-          <ActivityIndicator size="large" color="#007bff" style={styles.loaderOverlay} />
-        ) : (
-          <>
-            {step === "register" && (
-              <>
-                <Text style={styles.title}>Create Account</Text>
-                {errorMessage ? <Text style={styles.errorMessage}>{errorMessage}</Text> : null}
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  placeholderTextColor="#999"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  placeholderTextColor="#999"
-                  secureTextEntry
-                  value={password}
-                  onChangeText={setPassword}
-                />
-                <TouchableOpacity style={styles.button} onPress={handleSendVerificationEmail}>
-                  <Text style={styles.buttonText}>Send Verification Email</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                  <Text style={styles.switchText}>Already have an account? Login</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {step === "verifyLink" && (
-              <>
-                <Text style={styles.title}>Check Your Email</Text>
-                {errorMessage ? <Text style={styles.errorMessage}>{errorMessage}</Text> : null}
-                <Text style={styles.infoText}>
-                  We sent a verification link to your email. Click it, then press the button below.
-                </Text>
-                <TouchableOpacity style={styles.button} onPress={handleCompleteVerification}>
-                  <Text style={styles.buttonText}>I Clicked the Link</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {step === "verifyPin" && (
-              <>
-                <Text style={styles.title}>2FA Verification</Text>
-                {errorMessage ? <Text style={styles.errorMessage}>{errorMessage}</Text> : null}
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter PIN"
-                  placeholderTextColor="#999"
-                  value={pin}
-                  onChangeText={setPin}
-                  keyboardType="numeric"
-                />
-                <TouchableOpacity style={styles.button} onPress={handleVerifyPin}>
-                  <Text style={styles.buttonText}>Verify PIN</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </>
-        )}
+        <Ionicons name="person-add-outline" size={60} color="#3B82F6" style={styles.iconSmall} />
+        <Text style={styles.title}>Create Account</Text>
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor="#9CA3AF"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
+        />
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Password (min 6 characters)"
+          placeholderTextColor="#9CA3AF"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Confirm Password"
+          placeholderTextColor="#9CA3AF"
+          secureTextEntry
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+        />
+        
+        <TouchableOpacity 
+          style={styles.button}
+          onPress={handleRegister}
+        >
+          <Text style={styles.buttonText}>Create Account</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+          <Text style={styles.linkText}>Already have an account? Login</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.infoBox}>
+          <Ionicons name="information-circle-outline" size={20} color="#60A5FA" />
+          <Text style={styles.infoText}>
+            You'll receive a verification email. Please verify before logging in.
+          </Text>
+        </View>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a1a' },
+  container: {
+    flex: 1,
+    backgroundColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
   card: {
-    width: '90%',
+    width: '100%',
     maxWidth: 400,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20,
-    padding: 30,
+    backgroundColor: 'rgba(31, 41, 55, 0.8)',
+    borderRadius: 12,
+    padding: 32,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 5,
+    shadowRadius: 8,
     elevation: 8,
-    minHeight: 350,
-    justifyContent: 'center',
   },
-  loaderOverlay: { paddingVertical: 100 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#fff' },
-  input: {
-    height: 50,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 10,
-    marginBottom: 15,
-    paddingHorizontal: 15,
-    color: '#fff',
-    fontSize: 18,
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 24,
     textAlign: 'center',
   },
-  button: { backgroundColor: '#007bff', paddingVertical: 12, borderRadius: 10, marginTop: 10, width: '100%' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', textAlign: 'center' },
-  switchText: { color: '#add8e6', marginTop: 10, textAlign: 'center' },
-  infoText: { color: '#ccc', textAlign: 'center', marginBottom: 15 },
-  errorMessage: { color: '#ff6961', textAlign: 'center', marginBottom: 10, fontWeight: 'bold' },
+  input: {
+    width: '100%',
+    height: 48,
+    backgroundColor: 'rgba(55, 65, 81, 0.5)',
+    borderRadius: 8,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    color: '#FFFFFF',
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#4B5563',
+  },
+  button: {
+    width: '100%',
+    paddingVertical: 12,
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  linkText: {
+    color: '#60A5FA',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  iconSmall: {
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  infoText: {
+    color: '#D1D5DB',
+    fontSize: 13,
+    marginLeft: 8,
+    flex: 1,
+  },
 });
 
 export default RegistrationScreen;
