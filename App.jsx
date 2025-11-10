@@ -46,8 +46,8 @@ const App = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {/* Authenticated Screens */}
-        {user ? (
+        {/* Authenticated Screens - ONLY if user is logged in AND email is verified */}
+        {user && user.emailVerified ? (
           <>
             <Stack.Screen name="Dashboard" component={DashboardScreen} />
             <Stack.Screen name="History" component={HistoryScreen} />
