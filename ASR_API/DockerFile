@@ -1,24 +1,21 @@
-# Use a known stable Python version for PyTorch/HuggingFace builds
-FROM python:3.9-slim
+# Use a lightweight Python base image
+FROM python:3.10-slim
 
-# Set the working directory in the container
+# Install system dependencies required for audio processing (CRITICAL FIX)
+# This installs the tools needed for soundfile/librosa to decode mobile audio formats (like M4A)
+RUN apt-get update && \
+    apt-get install -y ffmpeg libsndfile1 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set the working directory inside the container
 WORKDIR /app
 
-# The COPY source path is now simplified to assume files are in the root context.
+# Copy the requirements file and install dependencies
 COPY requirements.txt .
-
-# Install dependencies (This is the memory-intensive step. We rely on HF's resources now)
-# We add build essential libraries often required by soundfile/librosa.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code
-COPY app.py .
+# Copy the rest of your application code
+COPY . .
 
-# Expose the port (8080 is the default for Gunicorn)
-EXPOSE 8080
-
-# Command to run the application using Gunicorn. FIX: Changed 'app:transcribe_audio' to 'app:app'
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--timeout", "300"]
+# Hugging Face Spaces requires the app to listen on port 7860
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
