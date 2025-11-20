@@ -1,8 +1,7 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, setLogLevel } from 'firebase/firestore'; 
 import { getStorage } from 'firebase/storage'; 
 
 // Your web app's Firebase configuration
@@ -20,8 +19,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
-const db = getFirestore(app);
+
+// CRITICAL FIX: Rename the initialized DB object to force correct context
+// and explicitly specify your Standard database ID 'asr-db'.
+setLogLevel('debug'); 
+const firestoreDb = getFirestore(app, 'asr-db'); 
+
 const storage = getStorage(app); 
 
-// Export the initialized services
-export { auth, db, storage };
+// Export the initialized services with the original expected names
+export { auth, firestoreDb as db, storage };

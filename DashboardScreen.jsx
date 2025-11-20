@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal, ActivityIndicator, TextInput, Alert, Platform, SafeAreaView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Modal, ActivityIndicator, TextInput, Alert, Platform, /* Removed SafeAreaView */ } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { signOut, onAuthStateChanged, User } from 'firebase/auth'; // Import User type
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'; 
+import { signOut, onAuthStateChanged, User } from 'firebase/auth'; 
+import { collection, doc, addDoc, serverTimestamp } from 'firebase/firestore'; 
 import { Audio } from 'expo-av';
 import * as DocumentPicker from 'expo-document-picker';
 import { auth, db } from './firebaseConfig'; 
@@ -24,7 +24,7 @@ const DashboardScreen = () => {
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-            setCurrentUser(user); // Set the user object here
+            setCurrentUser(user); 
             if (user) {
                 let nameToDisplay = 'User';
                 if (user.displayName) {
@@ -35,39 +35,41 @@ const DashboardScreen = () => {
                 }
                 setDisplayName(nameToDisplay);
             } else {
-                 // User logged out, navigation to login should handle this (usually handled by the main App component)
+                 // User logged out
             }
             setIsInitialLoading(false);
         });
         return () => unsubscribeAuth();
     }, [navigation]);
 
+    
     // --- NEW FUNCTION: SAVE TRANSCRIPTION TO FIRESTORE ---
-    // Now uses the guaranteed currentUser state variable
     const saveTranscriptionToHistory = async (text) => {
-        // Use the state variable which is guaranteed to be set by onAuthStateChanged
-        if (!currentUser || !text) { 
-            console.error("Cannot save transcription: User not logged in or text is empty.");
+        if (!currentUser || !text) {
+            console.error("Cannot save transcription: User not logged in or text empty.");
             return;
         }
 
-        const transcriptionPath = `users/${currentUser.uid}/transcriptions`; // Use currentUser
-        console.log(`Attempting to save transcription to Firestore path: ${transcriptionPath}`); 
-        console.log(`User UID: ${currentUser.uid}`); 
+        console.log("Saving transcription for UID:", currentUser.uid);
 
         try {
-            // Path: users/{userId}/transcriptions
-            const transcriptionsRef = collection(db, transcriptionPath);
-            
+            // 1. Reference the user document: db/users/{UID}
+            const userDocRef = doc(db, 'users', currentUser.uid); 
+
+            // 2. Reference the subcollection: db/users/{UID}/transcriptions
+            const transcriptionsRef = collection(userDocRef, 'transcriptions'); 
+
+            // 3. Add the new document
             const docRef = await addDoc(transcriptionsRef, {
                 text: text,
-                timestamp: serverTimestamp(), // Use Firestore server timestamp for accuracy
-                model: 'Dysarthria-ASR-v3' // Optionally track the model used
+                timestamp: serverTimestamp(),
+                model: "Dysarthria-ASR-v3"
             });
-            console.log("Transcription saved successfully to Firestore in the background. Document ID:", docRef.id); 
+            
+            console.log("🔥 Saved to Firestore successfully:", docRef.id);
+
         } catch (error) {
-            // This is the CRITICAL error log. Check this in your console!
-            console.error("CRITICAL FIRESTORE ERROR: Failed to save transcription:", error);
+            console.error("❌ Firestore write FAILED:", error);
         }
     };
 
@@ -127,10 +129,9 @@ const DashboardScreen = () => {
             const resultText = data?.transcription || 'Transcription failed to return text.';
             
             setTranscription(resultText);
-            Alert.alert('Success', 'Transcription complete!');
-            
-            // 4. CALL NEW SAVE FUNCTION (NON-BLOCKING)
-            // This is now safe because we use the currentUser state variable
+            Alert.alert("Success", "Transcription complete!");
+
+            // 🔥 SAVE HERE (NON-BLOCKING)
             saveTranscriptionToHistory(resultText);
 
         } catch (error) {
@@ -235,6 +236,16 @@ const DashboardScreen = () => {
     const showLogoutModal = () => setModalVisible(true);
     const closeModal = () => setModalVisible(false);
 
+    // CRITICAL: Navigation handler to ensure user is passed.
+    const handleNavigateHistory = () => {
+        if (!currentUser) {
+            Alert.alert("Error", "Please wait for authentication to complete.");
+            return;
+        }
+        // FIX: Use the screen name 'History' defined in App.js Stack Navigator.
+        navigation.navigate('History', { user: currentUser });
+    };
+
     // FIX: Only show dashboard content if initial loading is done AND user is authenticated
     if (isInitialLoading) {
         return (
@@ -259,8 +270,8 @@ const DashboardScreen = () => {
     // --- Render ---
     return (
         <View style={styles.container}>
-            {/* Main content area (no card styling) */}
-            <SafeAreaView style={styles.mainContentAreaWrapper}>
+            {/* Using a standard View instead of deprecated SafeAreaView */}
+            <View style={styles.mainContentAreaWrapper}>
                 
                 {/* Custom Greeting Header */}
                 <View style={styles.greetingHeader}>
@@ -302,14 +313,15 @@ const DashboardScreen = () => {
                         <ActivityIndicator size="large" color="#9a7fd1" style={{ marginBottom: 20 }} />
                     )}
                 </View>
-            </SafeAreaView>
+            </View>
 
             {/* Friendly Tab Bar Navigation */}
             <View style={styles.tabBarContainer}>
                 {/* 1. History Tab-Style Item */}
                 <TouchableOpacity
                     style={styles.tabItem}
-                    onPress={() => navigation.navigate('History')}
+                    // CRITICAL FIX: Use the new handler function
+                    onPress={handleNavigateHistory} 
                     disabled={loading}
                 >
                     <Text style={styles.tabIcon}>🕰️</Text>
@@ -363,9 +375,9 @@ const styles = StyleSheet.create({
     // Custom Greeting Header
     greetingHeader: {
         // FIX: Increased paddingTop to push greeting down from status bar/notch area
-        paddingTop: 30, 
+        paddingTop: 70, 
         paddingBottom: 40, // Increased spacing below the greeting
-        paddingLeft: 30, // Added padding left to align with screen padding
+        paddingLeft: 20, // Added padding left to align with screen padding
     },
     greetingText: {
         fontSize: 22, // Slightly larger font for greeting
