@@ -1,50 +1,108 @@
-# Welcome to your Expo app 👋
+ASR Mobile: Specialized Speech Recognition for Clinical Use
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+I. Project Overview
 
-## Get started
+ASR Mobile is a cross-platform mobile application built using Expo and React Native, designed for specialized Automatic Speech Recognition (ASR), particularly optimized for speech patterns observed in conditions like dysarthria.
 
-1. Install dependencies
+This application provides a secure authentication flow (Firebase), real-time recording capabilities, audio file upload features, and transcription history, all presented in a modern, subdued Dark Lavender theme suitable for clinical environments.
 
-   ```bash
-   npm install
-   ```
+II. Features
 
-2. Start the app
+- Secure Authentication: User registration, login, and password reset via Firebase Email/Password Auth, with optional biometric (Face ID/Touch ID) integration via expo-local-authentication.
 
-   ```bash
-   npx expo start
-   ```
+- Specialized ASR Integration: Connects to a high-accuracy, remote FastAPI endpoint (https://p29ris-dysarthria-asr-apiv3.hf.space/transcribe) for transcription optimized for complex speech patterns.
 
-In the output, you'll find options to open the app in a
+- Real-time Recording & Processing: Allows users to record speech directly in the app and submit the audio for transcription.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Transcription History: Persists all transcription results to Firestore for easy review and clinical logging.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- Cohesive Design: Implements a professional, low-light Dark Lavender theme across all screens (Dashboard, History, Login, Registration).
 
-## Get a fresh project
+III. Technology Stack
 
-When you're ready, run:
+- Frontend: React Native (Managed Workflow via Expo)
 
-```bash
-npm run reset-project
-```
+- Authentication & Database: Google Firebase (Authentication, Firestore)
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+- ASR Processing: Remote FastAPI Endpoint (Likely backed by a GPU-accelerated Hugging Face model)
 
-## Learn more
+- Local Storage: expo-secure-store for biometric credential caching
 
-To learn more about developing your project with Expo, look at the following resources:
+- Navigation: @react-navigation/stack
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+IV. Getting Started
 
-## Join the community
+1. Prerequisites:
 
-Join our community of developers creating universal apps.
+Node.js (LTS version)
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Expo CLI (npm install -g expo-cli)
+
+A Firebase Project configured with Authentication (Email/Password) and Firestore.
+
+2. Installation
+
+- Clone the Repository:
+
+git clone [YOUR_REPO_URL]
+cd ASRMobile
+
+
+- Install Dependencies:
+
+npm install
+
+
+- Configure Firebase:
+You must create a file named firebaseConfig.js (or .jsx) in the project root and populate it with your Firebase configuration object.
+
+// firebaseConfig.js
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+
+
+- Run the Application:
+Start the Expo development server:
+
+expo start
+
+
+Scan the QR code with your Expo Go app (iOS or Android) to run the application on your device.
+
+V. Theme Overview: Subdued Dark Lavender
+
+The application uses a custom dark theme optimized for low-light clinical settings.
+
+Background: Deep Charcoal (#1a1a1e, #2a2a30)
+
+Primary Accent: Deep Purple (#6a1b9a)
+
+Secondary/Info: Muted Lavender (#9a7fd1, #c2b3d8)
+
+Danger/Logout: Soft Red (#ff8a80)
+
+VI. Latency Justification
+
+The transcription process involves communicating with a powerful, specialized ASR model hosted remotely. Users may observe a noticeable delay (latency) after completing a recording.
+
+This latency is a direct consequence of prioritizing clinical accuracy:
+
+- Specialized Model: The ASR model is trained specifically for complex speech patterns, making it larger and more computationally demanding than general-purpose assistants.
+
+- GPU Processing: The model requires GPU acceleration for processing. The time taken is necessary to execute the complex calculations needed to ensure the highest possible accuracy for clinical diagnosis and communication support.
+
+- Queue Time: Due to shared server resources, the task may wait briefly in a queue before accessing the necessary computational resources.
