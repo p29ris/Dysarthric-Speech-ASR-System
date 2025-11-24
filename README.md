@@ -44,7 +44,7 @@ A Firebase Project configured with Authentication (Email/Password) and Firestore
 
 - Clone the Repository:
 
-git clone [YOUR_REPO_URL]
+git clone _url_
 cd ASRMobile
 
 
